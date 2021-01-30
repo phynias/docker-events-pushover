@@ -9,7 +9,7 @@ jobs:
     steps:
     - name: Set outputs
       id: vars
-      run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+      run: cd ..;echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
     - uses: actions/checkout@master
     - name: Publish to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
