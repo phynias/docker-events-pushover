@@ -8,11 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Declare some variables
-      id: vars
-      shell: bash
-      run: |
-        echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
-        echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+      - name: Set outputs
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
     - uses: actions/checkout@master
     - name: Publish to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
@@ -20,5 +18,5 @@ jobs:
         name: phynias/docker-events-pushover
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-        tags: "latest,${{ steps.vars.outputs.sha_short }}"
+        tags: "latest,${{ steps.vars.outputs.sha_short  }}"
         cache: true
