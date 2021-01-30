@@ -160,6 +160,7 @@ def watch_and_notify_events(client):
 
 
 def send_message(message):
+    print(message)
     client = Client(po_key, api_token=po_token)
     client.send_message(message,title="Docker Event")
 ##    global pb_key
