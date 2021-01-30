@@ -9,10 +9,6 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Get a short version of the GIT commit SHA to use in naming files
-      id: getshortsha
-      run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
     - uses: actions/checkout@master
     - name: Publish to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
@@ -20,5 +16,5 @@ jobs:
         name: phynias/docker-events-pushover
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-        tags: "latest,${{ getshortsha }}"
+        tags: "latest"
         #cache: true
