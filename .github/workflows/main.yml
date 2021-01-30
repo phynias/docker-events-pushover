@@ -3,13 +3,12 @@ on:
   push:
     branches:
       - master
+env:
+  SHORTSHA: $(git rev-parse --short=4 ${{ github.sha }})
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-    - name: Set outputs
-      id: vars
-      run: cd ..;echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
     - uses: actions/checkout@master
     - name: Publish to Registry
       uses: elgohr/Publish-Docker-Github-Action@master
@@ -17,5 +16,5 @@ jobs:
         name: phynias/docker-events-pushover
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-        tags: "latest,${{ steps.vars.outputs.sha_short }}"
+        tags: "latest,${{ SHORTSHA }}"
         #cache: true
