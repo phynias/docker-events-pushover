@@ -18,6 +18,8 @@ import os
 import sys
 import time
 import signal
+import sqlite3
+import traceback
 
 event_filters = ["create","update","destroy","die","kill","pause","unpause","start","stop"]
 ignore_names = []
@@ -33,6 +35,80 @@ def get_config(env_key, optional=False):
         sys.exit(1)
     return value
 
+def create_connection(db_file):
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        print("Limits db created.")
+        return conn
+    except sqlite3.Error as error:
+        print("create_connection error: {}".format(error))
+
+    return conn
+
+def create_table():
+    try:
+        cursor.execute(""" -- create limits table
+                                    CREATE TABLE IF NOT EXISTS limits (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        name text NOT NULL,
+                                        count integer,
+                                        last_update_ts DATETIME DEFAULT CURRENT_TIMESTAMP
+                                    );""")
+        cursor.execute(""" -- create trigger  
+                                    CREATE TRIGGER IF NOT EXISTS [UpdateLastTime]  
+                                    AFTER   
+                                    UPDATE  
+                                    ON limits
+                                    FOR EACH ROW   
+                                    WHEN NEW.last_update_ts <= OLD.last_update_ts  
+                                    BEGIN  
+                                        update limits set last_update_ts=CURRENT_TIMESTAMP where id=OLD.id;  
+                                    END""")
+        print("Limits table & trigger created.")
+    except sqlite3.Error as er:
+        print("create_table:")
+        print('SQLite error: %s' % (' '.join(er.args)))
+        print("Exception class is: ", er.__class__)
+        print('SQLite traceback: ')
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        print(traceback.format_exception(exc_type, exc_value, exc_tb))
+
+def update_limit_count(limit_name):
+    try:
+        cursor.execute("INSERT OR IGNORE into limits(name, count) VALUES('{}', 1)".format(limit_name))
+        cursor.execute("UPDATE limits set count = count + 1 WHERE name = '{}'".format(limit_name))
+        cursor.execute("SELECT count FROM limits WHERE name = '{}'".format(limit_name))
+        row = cursor.fetchone()
+        if row == None:
+            if bool(DEBUG): print("no limit found for {}".format(limit_name))
+            return 0
+        else:
+            if bool(DEBUG): print("limit found for {} = {}".format(limit_name, row[0]))
+            return row[0]
+
+
+    except sqlite3.Error as er:
+        print("update_limit_count:")
+        print('SQLite error: %s' % (' '.join(er.args)))
+        print("Exception class is: ", er.__class__)
+        print('SQLite traceback: ')
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        print(traceback.format_exception(exc_type, exc_value, exc_tb))
+
+def flush_limits():
+    try:
+        if bool(DEBUG): print("DELETE FROM limits WHERE last_update_ts < DATETIME('now', '{}')".format(LIMIT_FLUSH))
+        cursor.execute("DELETE FROM limits WHERE last_update_ts <= DATETIME('now', '{}')".format(LIMIT_FLUSH))
+        if bool(DEBUG): print("Limits Flushed.")
+     
+    except sqlite3.Error as er:
+        print("Failed to flush records in sqlite table.")
+        print('SQLite error: %s' % (' '.join(er.args)))
+        print("Exception class is: ", er.__class__)
+        print('SQLite traceback: ')
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        print(traceback.format_exception(exc_type, exc_value, exc_tb))
 
 def watch_and_notify_events(client):
     global event_filters
@@ -40,12 +116,12 @@ def watch_and_notify_events(client):
     event_filters = {"event": event_filters}
 
     for event in client.events(filters=event_filters, decode=True):
-#        print(event)
+        if bool(DEBUG): print(event)
         container_id = event['Actor']['ID'][:12]
         attributes = event['Actor']['Attributes']
         when = time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(event['time']))
         event['status'] = event['status']+'d'
-
+        flush_limits()
         x = 'no'
 
         try:
@@ -54,13 +130,26 @@ def watch_and_notify_events(client):
             pass
 
         if x != 'no':
-#            print('docker-events.ignore specified')
+            if bool(DEBUG): print('docker-events.ignore specified')
             continue
 		
-#       print('docker-events.ignore NOT specified')
+        if bool(DEBUG): print('docker-events.ignore NOT specified')
 			
         if attributes['name'] in ignore_names:
             continue
+
+        if LIMIT_PER or LIMIT_ALL:
+            if LIMIT_ALL:
+                this_count = update_limit_count("ALL")
+                if this_count >= LIMIT_ALL:
+                    print("LIMIT_ALL({}) limit hit({}). Not sending to pushover.".format(LIMIT_ALL, this_count))
+                    continue
+            if LIMIT_PER:
+                limit_name = "{}.{}".format(attributes['name'], event['status'])
+                this_count = update_limit_count(limit_name)
+                if this_count >= LIMIT_PER:
+                    print("LIMIT_PER{}) limit hit({}). Not sending to pushover.".format(LIMIT_PER, this_count))
+                    continue
 
         message = "The container {} ({}) {} at {}" \
                 .format(attributes['name'],
@@ -92,6 +181,21 @@ if __name__ == '__main__':
 ##    pb_key = get_config("PB_API_KEY")
     po_token = get_config("PUSHOVER_TOKEN")
     po_key = get_config("PUSHOVER_KEY")
+    # declare limit stuff
+    LIMIT_PER = int(os.getenv("LIMIT_PER"))
+    LIMIT_ALL= int(os.getenv("LIMIT_ALL"))
+    LIMIT_FLUSH = os.getenv("LIMIT_FLUSH")
+    DEBUG = os.getenv("DEBUG")
+    database = "/limits.db"
+
+    if LIMIT_PER or LIMIT_ALL:
+        conn = create_connection(database)
+        cursor = conn.cursor()
+        if conn is not None:
+            create_table()
+        else:
+            print("Error! cannot create the database connection.")
+            sys.exit(1)
 
     events_string = get_config("EVENTS", True)
     if events_string:

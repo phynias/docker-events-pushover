@@ -11,4 +11,4 @@ COPY . /usr/src/app
 RUN pip install --no-cache-dir -r requirements.txt && \
   rm /usr/src/app/requirements.txt
 
-CMD [ "/usr/local/bin/python", "/usr/src/app/app.py" ]
+CMD [ "python", "-u", "/usr/src/app/app.py" ]
