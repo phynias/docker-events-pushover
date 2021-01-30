@@ -20,4 +20,5 @@ jobs:
         name: phynias/docker-events-pushover
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+        tags: "latest,${{ steps.vars.outputs.sha_short }}"
         cache: true
